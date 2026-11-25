@@ -54,6 +54,9 @@
     <li><a href="#" class="nav-item" data-page="forms">
       <i class="bi bi-input-cursor-text" aria-hidden="true"></i><span>Form Checker</span>
     </a></li>
+    <li><a href="#" class="nav-item" data-page="morechecks">
+      <i class="bi bi-list-check" aria-hidden="true"></i><span>More Checks</span>
+    </a></li>
 
     <li class="nav-section-label">History & Reports</li>
     <li><a href="#" class="nav-item" data-page="history">
@@ -105,7 +108,7 @@
     <div id="page-home" class="page active">
       <div class="page-header">
         <h1 class="page-title">Welcome to DesignLens</h1>
-        <p class="page-subtitle">Your WCAG 2.1 AA Accessibility Analyzer powered by axe-core</p>
+        <p class="page-subtitle">Static-page WCAG 2.2 AA accessibility checks powered by axe-core</p>
       </div>
 
       <!-- Hero scan box -->
@@ -113,7 +116,7 @@
         <div class="row align-items-center g-4">
           <div class="col-lg-7">
             <div class="hero-badge mb-3">
-              <i class="bi bi-shield-check me-1" aria-hidden="true"></i>WCAG 2.1 AA · axe-core Engine
+              <i class="bi bi-shield-check me-1" aria-hidden="true"></i>WCAG 2.2 AA · axe-core Engine
             </div>
             <h2 class="hero-heading">Scan any website for accessibility issues in seconds</h2>
             <p class="hero-sub">Get real, actionable results — not sample data.</p>
@@ -217,7 +220,7 @@
             <div class="step-card">
               <div class="step-num">3</div>
               <h3>Run axe-core</h3>
-              <p>WCAG 2.1 AA rules are tested automatically.</p>
+              <p>WCAG 2.0, 2.1, and 2.2 A/AA rules are tested on the fetched HTML.</p>
             </div>
           </div>
           <div class="col-sm-6 col-lg-3">
@@ -245,7 +248,7 @@
     <div id="page-scan" class="page">
       <div class="page-header">
         <h1 class="page-title">Scan Website</h1>
-        <p class="page-subtitle">Enter a public URL to run WCAG 2.1 AA accessibility checks</p>
+        <p class="page-subtitle">Enter a public URL to run WCAG 2.2 AA accessibility checks</p>
       </div>
 
       <div class="scan-card">
@@ -308,12 +311,18 @@
                 <span class="score-label">/ 100</span>
               </div>
             </div>
-            <div class="d-flex flex-column gap-1">
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
               <button class="btn btn-sm btn-outline-secondary" id="newScanBtn2" aria-label="Start a new scan">
                 <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>New Scan
               </button>
-              <button class="btn btn-sm btn-primary" id="downloadPdfBtn" aria-label="Download PDF report">
+              <button class="btn btn-sm btn-primary" id="downloadPdfBtn" aria-label="Print or save report as PDF">
                 <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Download PDF
+              </button>
+              <button class="btn btn-sm btn-outline-primary" id="downloadJsonBtn" aria-label="Download full scan as JSON">
+                <i class="bi bi-braces me-1" aria-hidden="true"></i>JSON
+              </button>
+              <button class="btn btn-sm btn-outline-primary" id="downloadCsvBtn" aria-label="Download scan findings as CSV">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
               </button>
             </div>
           </div>
@@ -325,7 +334,7 @@
             <div class="summary-card summary-total" tabindex="0">
               <div class="summary-icon"><i class="bi bi-bug" aria-hidden="true"></i></div>
               <div class="summary-count" id="totalCount">0</div>
-              <div class="summary-label">Total Issues</div>
+              <div class="summary-label">Affected Elements</div>
             </div>
           </div>
           <div class="col-6 col-md-3">
@@ -381,6 +390,7 @@
             <button class="btn btn-sm btn-outline-primary" data-page="alttext"><i class="bi bi-image me-1" aria-hidden="true"></i>Alt-Text</button>
             <button class="btn btn-sm btn-outline-primary" data-page="headings"><i class="bi bi-text-indent-left me-1" aria-hidden="true"></i>Headings</button>
             <button class="btn btn-sm btn-outline-primary" data-page="forms"><i class="bi bi-input-cursor-text me-1" aria-hidden="true"></i>Forms</button>
+            <button class="btn btn-sm btn-outline-primary" data-page="morechecks"><i class="bi bi-list-check me-1" aria-hidden="true"></i>More Checks</button>
           </div>
         </div>
       </div>
@@ -618,6 +628,94 @@
     </div>
 
     <!-- ══════════════════════════════
+         PAGE: ADDITIONAL ANALYSIS TOOLS
+    ══════════════════════════════ -->
+    <div id="page-morechecks" class="page">
+      <div class="page-header">
+        <h1 class="page-title">More Accessibility Checks</h1>
+        <p class="page-subtitle">Focused reviews for links, tables, page structure, media, controls, and documents</p>
+      </div>
+      <div id="moreChecksNoScan" class="empty-state">
+        <i class="bi bi-list-check fs-1 d-block mb-2 text-muted" aria-hidden="true"></i>
+        <h3>Scan a page to use these checks</h3>
+        <p>Page-based checks use the latest scan. Keyboard, zoom, and PDF reviews are completed by you.</p>
+        <button class="btn btn-primary" data-page="scan">Scan a Website</button>
+      </div>
+      <div id="moreChecksContent" class="d-none">
+        <div class="limitation-note mb-3">
+          <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+          Automated results are review signals. Page HTML cannot prove that content works in every browser or for every person.
+        </div>
+
+        <section class="card-panel more-tool-section" aria-labelledby="linkCheckTitle">
+          <h2 class="panel-title" id="linkCheckTitle">1. Link Checker</h2>
+          <p class="text-muted small">Find links with missing or vague names and broken links to sections on this page.</p>
+          <div id="moreLinksSummary" class="more-check-summary" aria-live="polite"></div>
+          <div id="moreLinkFindings"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="tableCheckTitle">
+          <h2 class="panel-title" id="tableCheckTitle">2. Table Checker</h2>
+          <p class="text-muted small">Review table captions and header cells. Some tables are for layout, so check the context.</p>
+          <div id="moreTableFindings"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="pageBasicsTitle">
+          <h2 class="panel-title" id="pageBasicsTitle">3. Page Setup Checker</h2>
+          <p class="text-muted small">Review the page title, language, main region, landmarks, skip link, and zoom settings.</p>
+          <div id="morePageBasics"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="altQualityTitle">
+          <h2 class="panel-title" id="altQualityTitle">4. Alt Text Quality Review</h2>
+          <p class="text-muted small">Heuristics flag text for human review; they cannot decide whether a description is meaningful.</p>
+          <div id="moreAltQuality"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="mediaCheckTitle">
+          <h2 class="panel-title" id="mediaCheckTitle">5. Audio and Video Checker</h2>
+          <p class="text-muted small">Find media players and check whether caption tracks are present. Transcripts and caption accuracy need review.</p>
+          <div id="moreMediaFindings"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="formErrorTitle">
+          <h2 class="panel-title" id="formErrorTitle">6. Form Error Review</h2>
+          <p class="text-muted small">Automated form findings plus a saved manual check of what happens when a form has errors.</p>
+          <div id="moreFormFindings"></div>
+          <div id="formErrorChecklist" class="manual-review-list"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="controlNameTitle">
+          <h2 class="panel-title" id="controlNameTitle">7. Control Name Checker</h2>
+          <p class="text-muted small">Lists controls without a name in the fetched HTML. Review custom widgets in a browser too.</p>
+          <div id="moreControlFindings"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="focusReviewTitle">
+          <h2 class="panel-title" id="focusReviewTitle">8. Focus and Skip Link Review</h2>
+          <p class="text-muted small">Use the live site with a keyboard, then save your review here.</p>
+          <div id="focusReviewChecklist" class="manual-review-list"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="zoomReviewTitle">
+          <h2 class="panel-title" id="zoomReviewTitle">9. Zoom and Reflow Review</h2>
+          <p class="text-muted small">HTML inspection can spot zoom-blocking settings. Check actual layout at larger zoom in a browser.</p>
+          <div id="moreZoomFindings"></div>
+          <div id="zoomReviewChecklist" class="manual-review-list"></div>
+        </section>
+
+        <section class="card-panel more-tool-section" aria-labelledby="pdfReviewTitle">
+          <h2 class="panel-title" id="pdfReviewTitle">10. PDF Accessibility Review</h2>
+          <p class="text-muted small">Choose a PDF to open it locally and record a guided review. The file is not uploaded or automatically certified.</p>
+          <label for="pdfReviewFile" class="form-label fw-semibold">Choose a PDF (up to 30 MB)</label>
+          <input type="file" id="pdfReviewFile" class="form-control" accept="application/pdf,.pdf"/>
+          <div id="pdfReviewFileInfo" class="small mt-2" aria-live="polite"></div>
+          <div id="pdfReviewChecklist" class="manual-review-list mt-3"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════
          PAGE: SCAN HISTORY
     ══════════════════════════════ -->
     <div id="page-history" class="page">
@@ -665,8 +763,9 @@
         <button class="btn btn-primary mt-3" id="runCompareBtn" aria-label="Compare selected scans">
           <i class="bi bi-layout-split me-1" aria-hidden="true"></i>Compare
         </button>
+        <p class="text-muted small mt-2 mb-0">Compare findings by axe rule. Each row shows how many affected elements were found in each scan.</p>
       </div>
-      <div id="compareResults" class="d-none"></div>
+      <div id="compareResults" class="d-none" aria-live="polite"></div>
       <div class="limitation-note mt-3">
         <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
         Fewer issues does not prove full accessibility. Page changes between scans may affect matching.
@@ -685,7 +784,6 @@
     </div>
 
   </main><!-- /main -->
-</div><!-- /main-wrapper -->
 
 <!-- ══════ FOOTER ══════ -->
 <footer class="site-footer" role="contentinfo">
@@ -696,10 +794,11 @@
     </p>
     <p class="footer-sub mb-0">
       Built with <span aria-label="love">♥</span> using Node.js, Express &amp; axe-core ·
-      Follows WCAG 2.1 AA guidelines · Results are not a certification
+      Checks selected WCAG 2.0, 2.1, and 2.2 A/AA rules · Results are not a certification
     </p>
   </div>
 </footer>
+</div><!-- /main-wrapper -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/app.js"></script>

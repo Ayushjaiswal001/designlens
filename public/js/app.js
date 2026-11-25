@@ -8,6 +8,8 @@
 let currentScan = null;        // most recent scan result object
 let allIssues   = [];          // flat issue array for explorer
 let scanHistory = loadHistory(); // array of history entries
+let manualReviewState = loadManualReviewState();
+let selectedPdfObjectUrl = null;
 
 /* ── Fix Guidance (before/after code) ────────────────────────── */
 const FIX_GUIDANCE = {
@@ -105,6 +107,34 @@ const KB_ITEMS = [
   { id:'skip',   title:'"Skip to content" link', desc:'A "Skip to main content" link appears at the top (may be visually hidden until focused).' },
   { id:'img',    title:'Images keyboard-safe',   desc:'Images do not capture keyboard focus (unless interactive). Decorative images use alt="".' },
 ];
+
+const MANUAL_REVIEW_ITEMS = {
+  formErrors: [
+    { id:'identified', title:'Errors are explained in text', desc:'Submit the form with missing or invalid information. Each problem is described without relying on colour alone.' },
+    { id:'associated', title:'Errors are linked to fields', desc:'The message identifies the affected field and is announced when the user reaches it.' },
+    { id:'preserved', title:'Entered information is preserved', desc:'After an error, valid values remain so the form does not need to be completed again.' },
+    { id:'summary', title:'A useful error summary is provided', desc:'For longer forms, users can find a summary and move to the fields that need attention.' }
+  ],
+  focus: [
+    { id:'visible', title:'Focus is always visible', desc:'Tab through the live page and confirm the focused link or control is easy to see.' },
+    { id:'order', title:'Focus order makes sense', desc:'Tab and Shift+Tab follow a useful order through the content.' },
+    { id:'escape', title:'No keyboard trap', desc:'You can move away from every menu, dialog, and interactive control using the keyboard.' },
+    { id:'skip', title:'Skip link works', desc:'Activate the skip link and confirm focus or reading position moves to the main content.' }
+  ],
+  zoom: [
+    { id:'200', title:'Usable at 200% zoom', desc:'Text enlarges without being clipped or hidden.' },
+    { id:'reflow', title:'Usable at a narrow width', desc:'At about 320 CSS pixels wide, content reflows without unnecessary horizontal scrolling.' },
+    { id:'spacing', title:'Readable with increased spacing', desc:'Try larger line, paragraph, letter, and word spacing; content remains visible and usable.' }
+  ],
+  pdf: [
+    { id:'text', title:'Text can be selected and searched', desc:'The PDF contains real text rather than only scanned page images.' },
+    { id:'tags', title:'Document has tags and headings', desc:'Use a PDF accessibility checker or screen reader to review tags and heading structure.' },
+    { id:'images', title:'Important images have text alternatives', desc:'Review charts, diagrams, and other meaningful images for suitable descriptions.' },
+    { id:'order', title:'Reading order is understandable', desc:'Read the document with a screen reader or inspect its structure tree.' },
+    { id:'metadata', title:'Language and document title are set', desc:'Check the PDF properties for a useful title and the correct document language.' },
+    { id:'forms', title:'PDF fields have labels', desc:'If the PDF has form fields, test their names, instructions, and error feedback.' }
+  ]
+};
 
 /* ── LEARNING HUB lessons ─────────────────────────────────────── */
 const LESSONS = [
@@ -221,6 +251,15 @@ function fmtDate(iso) {
   try { return new Date(iso).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}); }
   catch { return iso||''; }
 }
+function loadManualReviewState() {
+  try {
+    const value = JSON.parse(localStorage.getItem('dl_manual_reviews') || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+function saveManualReviewState() {
+  try { localStorage.setItem('dl_manual_reviews', JSON.stringify(manualReviewState)); } catch {}
+}
 function scoreColor(s) {
   if (s>=80) return '#16a34a';
   if (s>=50) return '#d97706';
@@ -274,7 +313,7 @@ const PAGE_TITLES = {
   home:'Dashboard', scan:'Scan Website', issues:'Issue Explorer',
   fix:'Smart Fix Assistant', contrast:'Colour Contrast Checker',
   alttext:'Alt-Text Analyzer', keyboard:'Keyboard Checklist',
-  headings:'Heading Structure', forms:'Form Checker',
+  headings:'Heading Structure', forms:'Form Checker', morechecks:'More Accessibility Checks',
   history:'Scan History', compare:'Before & After', learning:'Learning Hub'
 };
 
@@ -293,8 +332,7 @@ function navigateTo(pageId) {
   document.getElementById('topbarTitle').textContent = PAGE_TITLES[pageId]||pageId;
 
   // On mobile close sidebar
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('show');
+  setSidebarOpen(false, false);
 
   // Refresh data-driven pages
   if (pageId==='issues')   renderIssueExplorer();
@@ -302,13 +340,19 @@ function navigateTo(pageId) {
   if (pageId==='alttext')  renderAltText();
   if (pageId==='headings') renderHeadings();
   if (pageId==='forms')    renderForms();
+  if (pageId==='morechecks') renderMoreChecks();
   if (pageId==='history')  renderHistory();
   if (pageId==='compare')  renderCompareSelects();
   if (pageId==='learning') renderLearning();
   if (pageId==='keyboard') renderKeyboardChecklist();
 
   // Focus main content for accessibility
-  document.getElementById('main-content').focus();
+  const mainContent = document.getElementById('main-content');
+  mainContent.focus({ preventScroll: true });
+  window.scrollTo({
+    top: 0,
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  });
 }
 
 // Delegate clicks on data-page buttons/links
@@ -318,16 +362,30 @@ document.addEventListener('click', e => {
 });
 
 /* ── Sidebar toggle ───────────────────────────────────────────── */
-document.getElementById('sidebarOpen').addEventListener('click', () => {
-  document.getElementById('sidebar').classList.add('open');
-  document.getElementById('sidebarOverlay').classList.add('show');
-  document.getElementById('sidebarOpen').setAttribute('aria-expanded','true');
-});
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('show');
-  document.getElementById('sidebarOpen').setAttribute('aria-expanded','false');
+function setSidebarOpen(open, restoreFocus = false) {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const trigger = document.getElementById('sidebarOpen');
+  const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
+  const isOpen = isMobile && open;
+  sidebar.classList.toggle('open', isOpen);
+  overlay.classList.toggle('show', isOpen);
+  sidebar.inert = isMobile && !isOpen;
+  sidebar.setAttribute('aria-hidden', String(isMobile && !isOpen));
+  trigger.setAttribute('aria-expanded', String(isOpen));
+  if (restoreFocus) trigger.focus();
 }
+
+document.getElementById('sidebarOpen').addEventListener('click', () => {
+  setSidebarOpen(true);
+  document.getElementById('sidebarClose').focus();
+});
+function closeSidebar() { setSidebarOpen(false, true); }
+setSidebarOpen(false);
+window.addEventListener('resize', () => setSidebarOpen(document.getElementById('sidebar').classList.contains('open')));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('sidebar').classList.contains('open')) closeSidebar();
+});
 document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
 document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
 
@@ -407,6 +465,8 @@ async function doScan(url, btnId, errId, loadingId, stepIds) {
     if (lurl) lurl.textContent = url;
   }
   if (stepIds) startLoadingSteps(stepIds);
+  // Do not leave a previous scan looking like the result of this request.
+  document.getElementById('scanResults').classList.add('d-none');
 
   try {
     const res = await fetch('/api/analyze', {
@@ -507,11 +567,27 @@ function renderScanResults(data) {
 }
 
 function buildSeverityChart(c) {
-  const ctx = document.getElementById('severityChart').getContext('2d');
+  const canvas = document.getElementById('severityChart');
+  const legend = document.getElementById('chartLegend');
   const vals = [c.critical||0, c.serious||0, c.moderate||0, c.minor||0];
   const total = vals.reduce((a,b)=>a+b,0);
   const colors = ['#dc2626','#ea580c','#ca8a04','#2563eb'];
   const labels = ['Critical','Serious','Moderate','Minor'];
+
+  if (typeof Chart === 'undefined') {
+    if (severityChart) { severityChart.destroy(); severityChart = null; }
+    canvas.hidden = true;
+    legend.removeAttribute('aria-hidden');
+    legend.setAttribute('role', 'status');
+    legend.innerHTML = `${labels.map((label,i)=>`<span class="legend-dot" style="--dot-color:${colors[i]}">${label}: ${vals[i]}</span>`).join('')}
+      <p class="text-muted small mt-2 mb-0">The visual chart could not load. Severity counts are still available above.</p>`;
+    return;
+  }
+
+  canvas.hidden = false;
+  legend.setAttribute('aria-hidden', 'true');
+  legend.removeAttribute('role');
+  const ctx = canvas.getContext('2d');
 
   if (severityChart) severityChart.destroy();
   severityChart = new Chart(ctx, {
@@ -534,13 +610,15 @@ function buildSeverityChart(c) {
     }
   });
 
-  document.getElementById('chartLegend').innerHTML = labels.map((l,i)=>
+  legend.innerHTML = labels.map((l,i)=>
     `<span class="legend-dot" style="--dot-color:${colors[i]}">${l} (${vals[i]})</span>`
   ).join('');
 }
 
 /* ── PDF Download (print-window approach — no external CDN needed) ── */
 document.getElementById('downloadPdfBtn').addEventListener('click', generatePdf);
+document.getElementById('downloadJsonBtn').addEventListener('click', exportJson);
+document.getElementById('downloadCsvBtn').addEventListener('click', exportCsv);
 
 function generatePdf() {
   if (!currentScan) {
@@ -741,6 +819,64 @@ function generatePdf() {
   }, 1200);
 }
 
+function reportFilename(extension) {
+  let host = 'website';
+  try { host = new URL(currentScan.url).hostname.replace(/[^a-z0-9.-]/gi, '_'); } catch {}
+  const date = (currentScan.scannedAt || new Date().toISOString()).replace(/[:.]/g, '-');
+  return `designlens-${host}-${date}.${extension}`;
+}
+
+function downloadReportFile(content, mimeType, extension) {
+  if (!currentScan) {
+    alert('No scan results to export. Please scan a website first.');
+    return;
+  }
+  const blob = new Blob([content], { type: mimeType });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = reportFilename(extension);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+function exportJson() {
+  if (!currentScan) return downloadReportFile('', 'application/json;charset=utf-8', 'json');
+  downloadReportFile(`${JSON.stringify(currentScan, null, 2)}\n`, 'application/json;charset=utf-8', 'json');
+}
+
+function exportCsv() {
+  if (!currentScan) return downloadReportFile('', 'text/csv;charset=utf-8', 'csv');
+  const headers = [
+    'Scanned URL', 'Scanned At', 'Scan Standards', 'Rule ID', 'Finding', 'Severity', 'Affected Elements',
+    'WCAG Tags', 'Description', 'Suggested Fix', 'Help URL', 'Sample Targets', 'Sample HTML',
+    'Total Rule Violations', 'Total Affected Elements', 'Rules Passed', 'Needs Manual Review'
+  ];
+  const csvCell = value => {
+    let text = value == null ? '' : Array.isArray(value) ? value.join('; ') : String(value);
+    // Prevent spreadsheet formula injection from page-derived strings.
+    if (/^[\s\u0000]*[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const issueRows = currentScan.issues && currentScan.issues.length
+    ? currentScan.issues
+    : [{ id: '', name: 'No violations detected by the configured axe rules', severity: '', affectedCount: 0, tags: [], description: '', suggestion: '', helpUrl: '', affectedElements: [] }];
+  const rows = issueRows.map(issue => {
+    const examples = (issue.affectedElements || []).slice(0, 5);
+    return [
+      currentScan.url, currentScan.scannedAt, currentScan.standards, issue.id, issue.name, issue.severityLabel || issue.severity,
+      issue.affectedCount, issue.tags, issue.description, issue.suggestion, issue.helpUrl,
+      examples.map(element => element.target || '').filter(Boolean),
+      examples.map(element => element.html || '').filter(Boolean),
+      currentScan.totalViolations || 0, currentScan.totalIssues || 0, currentScan.passes || 0, currentScan.incomplete || 0
+    ];
+  });
+  const csv = `\uFEFF${[headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
+  downloadReportFile(csv, 'text/csv;charset=utf-8', 'csv');
+}
+
 /* ══════════════════════════════════════════════════════════════
    RENDER: ISSUE EXPLORER
 ══════════════════════════════════════════════════════════════ */
@@ -817,7 +953,7 @@ function buildIssueCard(issue, idx) {
   const markedKey = `dl_fixed_${issue.id}`;
   const isMarked = sessionStorage.getItem(markedKey)==='1';
 
-  return `<div class="issue-card${isMarked?' opacity-50':''}" data-severity="${sev}" role="article" data-issue-id="${issue.id}">
+  return `<div class="issue-card${isMarked?' opacity-50':''}" data-severity="${sev}" role="article" data-issue-id="${esc(issue.id)}">
     <div class="issue-card-header" tabindex="0" role="button" aria-expanded="false" aria-controls="ib-${idx}">
       <span class="severity-badge severity-${sev}">${esc(issue.severityLabel||sev)}</span>
       <span class="issue-title">${esc(issue.name||issue.id)}</span>
@@ -825,7 +961,7 @@ function buildIssueCard(issue, idx) {
       ${isMarked?'<span class="badge bg-success" aria-label="Marked as reviewed">✓ Reviewed</span>':''}
       <i class="bi bi-chevron-down issue-chevron" aria-hidden="true"></i>
     </div>
-    <div class="issue-card-body" id="ib-${idx}">
+    <div class="issue-card-body" id="ib-${idx}" inert>
       <p class="issue-description">${esc(issue.description)}</p>
       ${tags.length?`<div class="wcag-tags">${tags.map(t=>`<span class="wcag-tag">${esc(t)}</span>`).join('')}</div>`:''}
       <div class="fix-suggestion">
@@ -840,7 +976,7 @@ function buildIssueCard(issue, idx) {
       <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
         ${issue.helpUrl?`<a href="${esc(issue.helpUrl)}" target="_blank" rel="noopener noreferrer" class="learn-more-link">
           <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>axe-core docs</a>`:''}
-        <button class="fix-status-btn${isMarked?' marked':''}" data-mark="${issue.id}" aria-pressed="${isMarked}">
+        <button class="fix-status-btn${isMarked?' marked':''}" data-mark="${esc(issue.id)}" aria-pressed="${isMarked}">
           ${isMarked?'✓ Marked as Reviewed':'Mark as Reviewed'}
         </button>
       </div>
@@ -867,7 +1003,10 @@ function attachIssueCardListeners(container) {
 
 function toggleCard(card, header) {
   card.classList.toggle('open');
-  header.setAttribute('aria-expanded', card.classList.contains('open').toString());
+  const isOpen = card.classList.contains('open');
+  header.setAttribute('aria-expanded', String(isOpen));
+  const panel = card.querySelector('.issue-card-body, .fix-card-body, .lesson-body');
+  if (panel) panel.inert = !isOpen;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -892,12 +1031,12 @@ function renderFixAssistant() {
     const g = FIX_GUIDANCE[issue.id]||null;
     const sev = (issue.severity||'minor').toLowerCase();
     return `<div class="fix-card" role="article">
-      <div class="fix-card-header" tabindex="0" role="button" aria-expanded="false">
+      <div class="fix-card-header" tabindex="0" role="button" aria-expanded="false" aria-controls="fix-${idx}">
         <span class="severity-badge severity-${sev}">${esc(issue.severityLabel||sev)}</span>
         <span style="font-weight:600;flex:1">${esc(issue.name||issue.id)}</span>
         <i class="bi bi-chevron-down issue-chevron" aria-hidden="true"></i>
       </div>
-      <div class="fix-card-body">
+      <div class="fix-card-body" id="fix-${idx}" inert>
         ${g?`
           <p class="mt-2"><strong>Why it matters:</strong> ${esc(g.why)}</p>
           <p><strong>Who is affected:</strong> ${esc(g.who)}</p>
@@ -947,7 +1086,7 @@ function renderFixAssistant() {
 function hexToRgb(hex) {
   hex = hex.trim().replace('#','');
   if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
-  if (hex.length!==6) return null;
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
   const n = parseInt(hex,16);
   return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
 }
@@ -955,7 +1094,11 @@ function parseColor(str) {
   str = str.trim();
   if (str.startsWith('#')) return hexToRgb(str);
   const m = str.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
-  if (m) return {r:+m[1],g:+m[2],b:+m[3]};
+  if (m) {
+    const color = {r:+m[1],g:+m[2],b:+m[3]};
+    if (Object.values(color).some(channel => channel > 255)) return null;
+    return color;
+  }
   return null;
 }
 function relativeLuminance({r,g,b}) {
@@ -979,7 +1122,16 @@ function updateContrast() {
   const bgStr = document.getElementById('bgColor').value;
   const fg = parseColor(fgStr);
   const bg = parseColor(bgStr);
-  if (!fg||!bg) return;
+  if (!fg||!bg) {
+    document.getElementById('ratioNum').textContent = '—';
+    ['normalAA','normalAAA','largeAA','largeAAA'].forEach(id => {
+      const badge = document.getElementById(id);
+      badge.textContent = 'Invalid colour';
+      badge.className = 'wcag-badge';
+    });
+    document.getElementById('contrastSuggestions').textContent = 'Enter a valid hex colour (#RGB or #RRGGBB) or rgb(r, g, b) value with channels from 0 to 255.';
+    return;
+  }
 
   const ratio = contrastRatio(fg,bg);
   document.getElementById('ratioNum').textContent = ratio.toFixed(2);
@@ -994,6 +1146,7 @@ function updateContrast() {
 
   // Preview
   const preview = document.getElementById('contrastPreview');
+  document.getElementById('contrastSuggestions').textContent = '';
   preview.style.background = bgStr;
   document.getElementById('previewNormal').style.color = fgStr;
   document.getElementById('previewLarge').style.color  = fgStr;
@@ -1229,6 +1382,183 @@ function renderForms() {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   ADDITIONAL ANALYSIS TOOLS
+══════════════════════════════════════════════════════════════ */
+function moreCheckRow(title, detail, state = 'review') {
+  const labels = { pass:'Looks present', review:'Review this', issue:'Needs attention', info:'Information' };
+  return `<div class="more-check-row">
+    <div class="more-check-copy"><strong>${esc(title)}</strong><span>${esc(detail)}</span></div>
+    <span class="more-check-badge ${state}">${labels[state] || labels.review}</span>
+  </div>`;
+}
+
+function renderManualChecklist(containerId, section, items) {
+  const host = document.getElementById(containerId);
+  if (!host) return;
+  const pageScope = (() => {
+    try { const parsed = new URL(currentScan?.url || location.href); return `${parsed.origin}${parsed.pathname}`; }
+    catch { return location.origin; }
+  })();
+  const selectedFile = section === 'pdf' ? document.getElementById('pdfReviewFile')?.files?.[0] : null;
+  const scope = section === 'pdf' && selectedFile
+    ? `${selectedFile.name}|${selectedFile.size}|${selectedFile.lastModified}`
+    : pageScope;
+  const keys = items.map(item => `${scope}::${section}::${item.id}`);
+  host.innerHTML = items.map((item, index) => {
+    const key = keys[index];
+    const saved = manualReviewState[key] || {};
+    const statuses = [
+      { value:'pass', label:'Pass' },
+      { value:'needs-work', label:'Needs work' },
+      { value:'not-tested', label:'Not tested' }
+    ];
+    return `<div class="manual-review-item">
+      <div class="manual-review-main"><strong>${esc(item.title)}</strong><p>${esc(item.desc)}</p></div>
+      <div class="manual-review-actions" role="group" aria-label="Review status for ${esc(item.title)}">
+        ${statuses.map(status => `<button type="button" class="manual-review-btn ${saved.status === status.value ? `selected ${status.value}` : ''}"
+          data-review-key="${esc(key)}" data-review-status="${status.value}" aria-pressed="${saved.status === status.value}">${status.label}</button>`).join('')}
+      </div>
+      <label class="visually-hidden" for="review-note-${containerId}-${index}">Notes for ${esc(item.title)}</label>
+      <input id="review-note-${containerId}-${index}" class="form-control form-control-sm manual-review-note" type="text"
+        placeholder="Optional note" value="${esc(saved.note || '')}" data-review-note="${esc(key)}" />
+    </div>`;
+  }).join('');
+  host.querySelectorAll('[data-review-key]').forEach(button => button.addEventListener('click', () => {
+    const key = button.dataset.reviewKey;
+    manualReviewState[key] = { ...(manualReviewState[key] || {}), status:button.dataset.reviewStatus };
+    saveManualReviewState();
+    renderManualChecklist(containerId, section, items);
+  }));
+  host.querySelectorAll('[data-review-note]').forEach(input => input.addEventListener('input', () => {
+    const key = input.dataset.reviewNote;
+    manualReviewState[key] = { ...(manualReviewState[key] || {}), note:input.value };
+    saveManualReviewState();
+  }));
+}
+
+function renderMoreChecks() {
+  const noScan = document.getElementById('moreChecksNoScan');
+  const content = document.getElementById('moreChecksContent');
+  noScan.classList.toggle('d-none', !!currentScan);
+  // Manual keyboard/zoom/PDF review remains available without a website scan.
+  content.classList.remove('d-none');
+  const scan = currentScan || {};
+  const links = scan.links || [];
+  const tables = scan.tables || [];
+  const images = scan.images || [];
+  const media = scan.media || [];
+  const controls = scan.controls || [];
+  const basics = scan.pageBasics || {};
+  const empty = '<p class="text-muted mb-0">Run a website scan to see this page-based result.</p>';
+
+  const linkFindings = links.filter(link => link.emptyName || link.vagueName || link.brokenFragment);
+  document.getElementById('moreLinksSummary').innerHTML = scan.url
+    ? `<span class="more-check-pill">${links.length} links checked</span><span class="more-check-pill">${linkFindings.length} review signals</span>`
+    : empty;
+  document.getElementById('moreLinkFindings').innerHTML = !scan.url ? '' : linkFindings.length
+    ? linkFindings.map(link => moreCheckRow(
+      link.text || '(link has no text)',
+      [link.emptyName ? 'No link name found.' : '', link.vagueName ? 'Text may not explain the destination.' : '', link.brokenFragment ? `Section target not found: ${link.href}` : '', link.href && !link.brokenFragment ? `Destination: ${link.href}` : ''].filter(Boolean).join(' '),
+      link.emptyName || link.brokenFragment ? 'issue' : 'review'
+    )).join('')
+    : '<p class="text-success mb-0">No empty, generic, or broken in-page links were flagged.</p>';
+
+  const tableFindings = tables.filter(table => table.reviewHints?.length);
+  document.getElementById('moreTableFindings').innerHTML = !scan.url ? empty : tables.length
+    ? tables.map(table => moreCheckRow(
+      `Table ${table.index}${table.caption ? `: ${table.caption}` : ''}`,
+      `${table.rowCount} rows; ${table.headerCount} header cells. ${table.reviewHints?.join(' ') || 'Header cells were found; confirm they describe the data clearly.'}`,
+      table.reviewHints?.length ? 'review' : 'pass'
+    )).join('')
+    : '<p class="text-muted mb-0">No tables found on this page.</p>';
+
+  document.getElementById('morePageBasics').innerHTML = !scan.url ? empty : [
+    moreCheckRow('Page title', basics.title || 'No title found in the document head.', basics.title ? 'pass' : 'issue'),
+    moreCheckRow('Page language', basics.lang || 'No language declaration found on the html element.', basics.lang ? 'pass' : 'issue'),
+    moreCheckRow('Main content region', `${basics.landmarks?.main || 0} main region(s) found.`, basics.landmarks?.main === 1 ? 'pass' : 'review'),
+    moreCheckRow('Navigation landmarks', `${basics.landmarks?.nav || 0} found. Check that each navigation region has a useful name.`, (basics.landmarks?.nav || 0) ? 'pass' : 'review'),
+    moreCheckRow('Skip link', `${basics.skipLinks || 0} possible skip link(s) found. Test that the link moves focus to main content.`, basics.skipLinks ? 'pass' : 'review'),
+    moreCheckRow('Viewport zoom settings', basics.viewport ? (basics.viewportBlocksZoom ? 'The viewport may prevent user zoom.' : 'A viewport declaration is present; confirm zoom remains available.') : 'No viewport declaration found.', basics.viewportBlocksZoom ? 'issue' : 'review')
+  ].join('');
+
+  const altReview = images.filter(image => image.reviewHints?.length);
+  document.getElementById('moreAltQuality').innerHTML = !scan.url ? empty : altReview.length
+    ? altReview.map(image => moreCheckRow(image.alt || '(empty alt text)', `${image.src || 'Image'} — ${image.reviewHints.join(' ')}`, 'review')).join('')
+    : `<p class="${images.length ? 'text-success' : 'text-muted'} mb-0">${images.length ? 'No alt text wording heuristics were triggered. Human review is still needed.' : 'No images found on this page.'}</p>`;
+
+  document.getElementById('moreMediaFindings').innerHTML = !scan.url ? empty : media.length
+    ? media.map(item => moreCheckRow(
+      `${item.kind === 'video' ? 'Video' : 'Audio'} ${item.index}`,
+      item.kind === 'video'
+        ? (item.captions ? 'A captions track is present. Check its accuracy and synchronization.' : 'No captions track was found. Check whether captions and audio description are needed.')
+        : 'Check for an equivalent transcript. Transcript availability cannot be reliably determined from page HTML.',
+      item.kind === 'video' && !item.captions ? 'review' : 'review'
+    )).join('')
+    : '<p class="text-muted mb-0">No audio or video elements found on this page.</p>';
+
+  const formIds = ['label','aria-required-attr','form-field-multiple-labels','select-name','input-button-name','input-image-alt'];
+  const formIssues = (scan.issues || []).filter(issue => formIds.includes(issue.id));
+  document.getElementById('moreFormFindings').innerHTML = !scan.url ? empty : formIssues.length
+    ? `<p class="small text-muted">${formIssues.length} axe-core form finding(s):</p>${formIssues.map(issue => moreCheckRow(issue.name || issue.id, `${issue.affectedCount} affected element(s). ${issue.suggestion || ''}`, 'issue')).join('')}`
+    : `<p class="${scan.formCount ? 'text-success' : 'text-muted'} mb-2">${scan.formCount ? 'No configured axe form findings were reported.' : 'No forms found on this page.'} Submit forms in a browser to review error messages and recovery.</p>`;
+
+  const unnamed = controls.filter(control => control.missingName);
+  document.getElementById('moreControlFindings').innerHTML = !scan.url ? empty : unnamed.length
+    ? unnamed.map(control => moreCheckRow(`${control.tag}${control.type ? ` (${control.type})` : ''}${control.id ? ` #${control.id}` : ''}`, 'No text, label, title, or ARIA name was found in the fetched markup.', 'issue')).join('')
+    : `<p class="${controls.length ? 'text-success' : 'text-muted'} mb-0">${controls.length ? `No unnamed controls found among ${controls.length} checked.` : 'No interactive controls found on this page.'} Custom controls still need browser review.</p>`;
+
+  document.getElementById('moreZoomFindings').innerHTML = !scan.url ? '<p class="text-muted">Run a scan for viewport settings. The layout checklist below is available now.</p>'
+    : moreCheckRow('Page viewport', basics.viewport || 'No viewport declaration found.', basics.viewportBlocksZoom ? 'issue' : 'review');
+
+  renderManualChecklist('formErrorChecklist', 'form-errors', MANUAL_REVIEW_ITEMS.formErrors);
+  renderManualChecklist('focusReviewChecklist', 'focus', MANUAL_REVIEW_ITEMS.focus);
+  renderManualChecklist('zoomReviewChecklist', 'zoom', MANUAL_REVIEW_ITEMS.zoom);
+  const pdfFile = document.getElementById('pdfReviewFile')?.files?.[0];
+  const pdfHost = document.getElementById('pdfReviewChecklist');
+  if (pdfFile && (pdfFile.type === 'application/pdf' || pdfFile.name.toLowerCase().endsWith('.pdf')) && pdfFile.size <= 30 * 1024 * 1024) {
+    pdfHost.classList.remove('d-none');
+    renderManualChecklist('pdfReviewChecklist', 'pdf', MANUAL_REVIEW_ITEMS.pdf);
+  } else {
+    pdfHost.innerHTML = '<p class="text-muted mb-0">Choose a PDF to start its guided review.</p>';
+  }
+}
+
+document.getElementById('pdfReviewFile').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  const info = document.getElementById('pdfReviewFileInfo');
+  const checklist = document.getElementById('pdfReviewChecklist');
+  if (selectedPdfObjectUrl) URL.revokeObjectURL(selectedPdfObjectUrl);
+  selectedPdfObjectUrl = null;
+  checklist.innerHTML = '';
+  if (!file) { info.textContent = ''; renderMoreChecks(); return; }
+  const looksLikePdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (!looksLikePdf || file.size > 30 * 1024 * 1024) {
+    info.textContent = looksLikePdf ? 'The PDF is larger than the 30 MB limit.' : 'Choose a PDF file.';
+    info.className = 'small mt-2 text-danger';
+    event.target.value = '';
+    renderMoreChecks();
+    return;
+  }
+  let signature = '';
+  try { signature = await file.slice(0, 5).text(); } catch {}
+  if (signature !== '%PDF-') {
+    info.textContent = 'This file does not appear to have a valid PDF header.';
+    info.className = 'small mt-2 text-danger';
+    event.target.value = '';
+    renderMoreChecks();
+    return;
+  }
+  selectedPdfObjectUrl = URL.createObjectURL(file);
+  info.className = 'small mt-2 text-success';
+  info.innerHTML = `${esc(file.name)} · ${(file.size / (1024 * 1024)).toFixed(1)} MB · stays on this device. <a href="${selectedPdfObjectUrl}" target="_blank" rel="noopener">Open PDF</a>`;
+  renderMoreChecks();
+});
+
+window.addEventListener('beforeunload', () => {
+  if (selectedPdfObjectUrl) URL.revokeObjectURL(selectedPdfObjectUrl);
+});
+
+/* ══════════════════════════════════════════════════════════════
    SCAN HISTORY
 ══════════════════════════════════════════════════════════════ */
 function renderHistory() {
@@ -1280,11 +1610,29 @@ document.getElementById('clearHistory').addEventListener('click', () => {
 ══════════════════════════════════════════════════════════════ */
 function renderCompareSelects() {
   const opts = scanHistory.length
-    ? scanHistory.map(h=>`<option value="${h.id}">${esc(h.url.substring(0,50))} — ${fmtDate(h.scannedAt)} (Score: ${h.score})</option>`).join('')
+    ? scanHistory.map(h=>`<option value="${esc(h.id)}">${esc(h.url.substring(0,50))} — ${fmtDate(h.scannedAt)} (Score: ${h.score})</option>`).join('')
     : '<option disabled>No scans in history yet</option>';
-  document.getElementById('compareA').innerHTML = opts;
-  document.getElementById('compareB').innerHTML = opts;
+  const selectA = document.getElementById('compareA');
+  const selectB = document.getElementById('compareB');
+  selectA.innerHTML = opts;
+  selectB.innerHTML = opts;
+  const compareButton = document.getElementById('runCompareBtn');
+  const results = document.getElementById('compareResults');
+  const hasTwoScans = scanHistory.length >= 2;
+  compareButton.disabled = !hasTwoScans;
+  results.classList.toggle('d-none', hasTwoScans);
+  results.innerHTML = hasTwoScans ? '' : '<div class="empty-state"><h3>Scan a website twice to compare findings</h3><p>At least two saved scans are needed for a before-and-after comparison.</p></div>';
+  if (hasTwoScans) {
+    selectA.value = scanHistory[1].id;
+    selectB.value = scanHistory[0].id;
+  }
 }
+
+['compareA', 'compareB'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    document.getElementById('compareResults').classList.add('d-none');
+  });
+});
 
 document.getElementById('runCompareBtn').addEventListener('click', () => {
   const idA = document.getElementById('compareA').value;
@@ -1295,6 +1643,33 @@ document.getElementById('runCompareBtn').addEventListener('click', () => {
 
   const scoreChange = b.score - a.score;
   const issueChange = b.totalIssues - a.totalIssues;
+  const affectedCount = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+  const beforeByRule = new Map((a.issues || []).map(issue => [issue.id, issue]));
+  const afterByRule = new Map((b.issues || []).map(issue => [issue.id, issue]));
+  const added = [...afterByRule.values()].filter(issue => !beforeByRule.has(issue.id));
+  const resolved = [...beforeByRule.values()].filter(issue => !afterByRule.has(issue.id));
+  const persisted = [...afterByRule.values()].filter(issue => beforeByRule.has(issue.id));
+  const findingRows = [
+    ...added.map(issue => ({ state: 'New', issue, before: 0, after: affectedCount(issue.affectedCount) })),
+    ...resolved.map(issue => ({ state: 'Resolved', issue, before: affectedCount(issue.affectedCount), after: 0 })),
+    ...persisted.map(issue => {
+      const beforeCount = affectedCount(beforeByRule.get(issue.id).affectedCount);
+      const afterCount = affectedCount(issue.affectedCount);
+      const state = afterCount < beforeCount ? 'Fewer affected elements' : afterCount > beforeCount ? 'More affected elements' : 'Still present';
+      return { state, issue, before: beforeCount, after: afterCount };
+    })
+  ];
+  const findingTable = findingRows.length ? `
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle">
+        <caption class="visually-hidden">Accessibility rule findings changed between the selected scans</caption>
+        <thead><tr><th scope="col">Change</th><th scope="col">Rule</th><th scope="col">Severity</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+        <tbody>${findingRows.map(row => `<tr>
+          <td>${esc(row.state)}</td><td><code>${esc(row.issue.id)}</code> · ${esc(row.issue.name || row.issue.id)}</td>
+          <td>${esc(row.issue.severity || 'unknown')}</td><td>${row.before}</td><td>${row.after}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '<div class="empty-state mt-3"><h3>No findings in either scan</h3><p>Both scans returned no rule violations.</p></div>';
 
   function delta(val, invert=false) {
     if (val===0) return `<span class="compare-delta delta-same">No change</span>`;
@@ -1304,6 +1679,7 @@ document.getElementById('runCompareBtn').addEventListener('click', () => {
 
   document.getElementById('compareResults').classList.remove('d-none');
   document.getElementById('compareResults').innerHTML = `
+    ${a.url !== b.url ? '<div class="limitation-note mb-3">These scans use different URLs. The rule comparison is shown, but their page content may not be comparable.</div>' : ''}
     <div class="row g-3 mb-3">
       <div class="col-md-6">
         <div class="card-panel">
@@ -1349,6 +1725,11 @@ document.getElementById('runCompareBtn').addEventListener('click', () => {
           ${delta(((b.severityCounts||{}).serious||0)-((a.severityCounts||{}).serious||0), true)}
         </div>
       </div>
+    </div>
+    <div class="card-panel mt-3">
+      <h2 class="panel-title">Finding Changes</h2>
+      <p class="text-muted small mb-0">${added.length} new rule(s), ${resolved.length} resolved, ${persisted.length} still present. Counts show affected elements per rule.</p>
+      ${findingTable}
     </div>`;
 });
 
@@ -1358,14 +1739,14 @@ document.getElementById('runCompareBtn').addEventListener('click', () => {
 function renderLearning() {
   document.getElementById('learningHub').innerHTML = LESSONS.map((lesson,idx) => `
     <div class="lesson-card" role="article">
-      <div class="lesson-header" tabindex="0" role="button" aria-expanded="false">
+      <div class="lesson-header" tabindex="0" role="button" aria-expanded="false" aria-controls="lesson-${idx}">
         <div class="lesson-icon" style="background:${lesson.bg};color:${lesson.color}">
           <i class="${lesson.icon}" aria-hidden="true"></i>
         </div>
         <span class="lesson-title">${esc(lesson.title)}</span>
         <i class="bi bi-chevron-down issue-chevron" aria-hidden="true"></i>
       </div>
-      <div class="lesson-body">${lesson.content}</div>
+      <div class="lesson-body" id="lesson-${idx}" inert>${lesson.content}</div>
     </div>
   `).join('');
 

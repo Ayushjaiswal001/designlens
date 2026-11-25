@@ -1,5 +1,7 @@
 # DesignLens — Project Analysis, Security Audit & Improvement Roadmap
 
+> **Historical snapshot:** This document describes a review performed against a different checkout path and predates the stabilization work in this branch. Its reported experiments, dependency inventory, scores, and claims are not current verification evidence. Use [AUDIT_REPORT.md](AUDIT_REPORT.md) and [docs/TECHNICAL_AND_ACADEMIC_REPORT.md](docs/TECHNICAL_AND_ACADEMIC_REPORT.md) for the audit and tests performed against this repository revision.
+
 > **Document type:** Independent project review, weakness audit, and feature roadmap
 > **Project:** DesignLens — Website Accessibility Analyzer (`C:\Users\shiva\mini\miniproject`)
 > **Reviewed:** 23 November 2026

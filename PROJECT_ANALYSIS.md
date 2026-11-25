@@ -1,5 +1,7 @@
 # 🔍 DesignLens – Comprehensive Project Analysis & Security Audit
 
+> **Historical snapshot:** This document predates the current branch's stabilization changes. Its status table, security recommendations, and quantitative claims are not a current audit. Use [AUDIT_REPORT.md](AUDIT_REPORT.md) and [the technical and academic report](docs/TECHNICAL_AND_ACADEMIC_REPORT.md) as the current source of truth.
+
 > **Document Version:** 2.0  
 > **Date:** November 2026  
 > **Project:** DesignLens – Website Accessibility Analyzer  

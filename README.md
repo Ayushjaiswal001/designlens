@@ -1,115 +1,72 @@
-# 🔍 DesignLens – Website Accessibility Analyzer
+# DesignLens
 
-> A modern, full-featured web accessibility workspace that analyzes websites for WCAG 2.1 AA barriers, provides actionable repair guidance with code samples, and features an integrated suite of diagnostic tools.
+DesignLens is a browser-based website accessibility analysis tool. It fetches a public HTML page, checks its static document with axe-core, and presents violations and supporting utilities for reviewing images, headings, forms, and color pairs.
 
-Built with **Node.js**, **Express**, **axe-core**, and a responsive SaaS interface with deep navy & purple accents.
+> **Scope:** The GitHub repository is DesignLens, not “S Campus Care.” This project has no campus complaint workflow, user accounts, database, AI model, or machine-learning predictions. axe-core is a rule engine. The current scanner analyzes the initial HTML response; it does not render client-side applications or certify WCAG conformance.
 
----
+## Features
 
-## 📸 Key Features
+- Static-page accessibility scan using axe-core WCAG 2.0/2.1/2.2 A/AA and best-practice tags.
+- Severity counts, issue details, affected HTML snippets, and suggested fixes.
+- Browser-side color contrast calculator, image-alt and heading summaries, form review, keyboard checklist, scan history, and comparison.
+- More Checks workspace: link and in-page target review, table structure, page title/language/landmarks, alt-text wording hints, media caption-track review, and control-name checks.
+- Guided form-error, keyboard-focus, zoom/reflow, and PDF accessibility reviews. Manual results are saved in this browser; selected PDFs stay local and are not automatically parsed.
+- Print-friendly report and learning hub.
+- JSON and CSV exports, plus issue-level comparisons between saved scans.
 
-- **Automated WCAG 2.1 AA Scanner:** Powered by `axe-core` and JSDOM to inspect any valid public URL.
-- **Accessibility Score (0–100):** Weighted algorithm evaluating Critical, Serious, Moderate, and Minor impacts.
-- **Interactive Issue Explorer:** Real-time search, severity filtering, sorting, and manual "Mark as Reviewed" status.
-- **Smart Fix Assistant:** Before/after code examples, why-it-matters context, affected personas, and one-click copy buttons.
-- **Colour Contrast Checker:** Real-time color pickers with calculated contrast ratios against WCAG AA & AAA thresholds for normal and large text.
-- **Alt-Text Analyzer:** Breaks down all page images into informative, decorative (`alt=""`), and missing alternatives.
-- **Heading Structure Analyzer:** Visualizes the H1–H6 document outline with warnings for skipped hierarchy levels.
-- **Form Accessibility Checker:** Audits form controls, label associations, required indicators, and accessible button names.
-- **Keyboard Testing Checklist:** 12-item guided manual checklist (Tab order, focus traps, escape key, etc.) with state persistence.
-- **Scan History & Comparison:** Local storage history tracking with a side-by-side **Before & After** delta comparator.
-- **Clean PDF Report Generator:** Zero-dependency print-to-PDF engine with custom formatting for client presentations and audits.
-- **Learning Hub:** 8 beginner-friendly modular guides explaining core WCAG principles and POUR standards.
-- **Theme Support:** Dark & Light mode switchable interface with full keyboard accessibility.
+Scan history and manual checklist state are stored in the current browser. There is no server-side persistence.
 
----
+## Architecture
 
-## 📁 Project Structure
-
-```
-miniproject/
-├── backend/
-│   └── analyzer.js          # Core scanning engine (Axios, JSDOM, axe-core)
-├── public/
-│   ├── css/
-│   │   └── style.css        # Responsive stylesheet with light/dark theme variables
-│   ├── js/
-│   │   └── app.js           # Single Page Application controller and diagnostic tools
-│   └── index.html           # Accessible HTML5 single-page application shell
-├── .gitignore
-├── PROJECT_ANALYSIS.md      # In-depth architectural analysis, security audit & roadmap
-├── package.json
-├── server.js                # Express API with Helmet, CORS, Rate-Limiting & SSRF defenses
-└── README.md
+```text
+Browser (HTML/CSS/JavaScript; Bootstrap and Chart.js from jsDelivr)
+  ├─ POST /api/analyze { url }
+  └─ localStorage/sessionStorage
+       ↓
+Express + Helmet + rate limiting
+  └─ analyzer worker (maximum 2 concurrent)
+       ├─ Axios fetch; public DNS/IP validation; no redirects
+       ├─ JSDOM with page scripts and subresources disabled
+       └─ axe-core → JSON results
 ```
 
----
+## Requirements and setup
 
-## 🛠️ Technology Stack
+- Node.js 18 or newer and npm.
 
-- **Backend:** Node.js, Express.js
-- **Accessibility Engine:** `axe-core` (v4.8+)
-- **DOM Parsing:** `jsdom`
-- **HTTP Client:** `axios`
-- **Frontend:** HTML5, CSS3, JavaScript (ES6+), Bootstrap 5, Chart.js, Bootstrap Icons
-- **Security:** Helmet, express-rate-limit, SSRF IP blocking
-
----
-
-## 🚀 Quick Start Guide
-
-### Prerequisites
-- [Node.js](https://nodejs.org) (v16.x or newer)
-- `npm` (included with Node.js)
-
-### Installation & Execution
-
-```bash
-# 1. Clone repository
-git clone <your-repo-url>
-cd miniproject
-
-# 2. Install dependencies
-npm install
-
-# 3. Start the application
+```powershell
+npm ci
 npm start
 ```
 
-Open your browser at **`http://localhost:3000`**.
+Open <http://localhost:3000>. For development with auto-restart, run `npm run dev`.
 
-For auto-reloading during development:
-```bash
-npm run dev
-```
+## API
 
----
+### `GET /api/health`
 
-## 📊 Score Calculation Formula
+Returns `{ "status": "ok" }`.
 
-DesignLens calculates a transparent, project-specific indicator score out of 100:
+### `POST /api/analyze`
 
-$$\text{Score} = \max\Big(0, 100 - (10 \times \text{Critical} + 5 \times \text{Serious} + 2 \times \text{Moderate} + 1 \times \text{Minor})\Big)$$
+Request JSON: `{ "url": "https://example.com" }`. Only HTTP/HTTPS URLs using standard ports are accepted. Targets must resolve exclusively to public IP addresses. Redirects are rejected; submit the final URL directly. Responses include the URL, scan timestamp and duration, violation list, severity counts by affected element, axe pass/incomplete counts, and static summaries for images, headings, links, tables, media, controls, page metadata, and forms. Scans run the available axe-core WCAG 2.0, 2.1, and 2.2 A/AA tags plus best-practice rules.
 
-*Note: This score is a diagnostic metric and does not represent an official certification of WCAG conformance.*
+Errors use appropriate 4xx/5xx statuses and generic client-facing messages. Unexpected failures include a request ID for server-log correlation.
 
----
+## Security and analysis limits
 
-## 🛡️ Security Features
+- URL DNS answers are checked and pinned for the request; private, reserved, loopback, link-local, and non-unicast addresses are rejected.
+- Redirects and nonstandard ports are rejected. The analyzer does not execute scanned page scripts or load its subresources.
+- Analysis runs in a worker thread with a 20-second hard deadline and two-scan concurrency limit. This limits hangs; it is not a full OS process or memory sandbox.
+- The API is intended for local/student demonstration. A public deployment still needs operational controls such as proxy-aware client IP configuration, request monitoring, and infrastructure-level egress restrictions.
+- JSDOM has no browser layout engine. Color contrast in the scan cannot be reliably evaluated; use the separate solid-color calculator and manually inspect rendered pages.
+- Wording checks for alt text and links are heuristics. Focus order, real form error behavior, zoom/reflow, transcripts, and PDF structure require manual or browser/document testing. The PDF tool is a guided checklist, not an automated PDF parser.
+- Single-page applications, authenticated pages, iframes, and content added after page load are outside the current scan scope.
 
-- **SSRF Prevention:** Restricts requests to `http:` and `https:`, blocking loopback (`127.0.0.1`, `::1`), private subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and AWS/cloud metadata (`169.254.169.254`).
-- **Rate Limiting:** Protects backend against abuse (20 requests per 15-minute window per IP).
-- **Payload Restrictions:** Enforces maximum HTML payload size (5 MB) and 15-second request timeouts.
-- **Sanitized Presentation:** All dynamic HTML node snippets are sanitized and escaped before DOM insertion.
+## Testing and project documents
 
----
+Run the automated checks with `npm test`. The current findings and feature ideas are in [docs/UI_AUDIT_AND_FEATURE_IDEAS.md](docs/UI_AUDIT_AND_FEATURE_IDEAS.md); the repository audit and technical/academic report are in [AUDIT_REPORT.md](AUDIT_REPORT.md) and [docs/TECHNICAL_AND_ACADEMIC_REPORT.md](docs/TECHNICAL_AND_ACADEMIC_REPORT.md).
 
-## 📑 Detailed Project Audit
+## License
 
-For an in-depth technical analysis, weaknesses audit, and long-term upgrade roadmap, see [PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md).
-
----
-
-## 📄 License
-
-MIT License. Designed as an educational and developer accessibility auditing tool.
+MIT (see package metadata).

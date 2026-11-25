@@ -93,6 +93,8 @@ function createApp({ analyze = analyzeUrl, logger = console, allowedOrigins = pr
       }
       if (error.code === 'ERR_REDIRECT_BLOCKED') return res.status(422).json({ error: error.message });
       if (error.code === 'ERR_NOT_HTML') return res.status(422).json({ error: error.message });
+      if (error.code === 'ERR_TARGET_BLOCKED') return res.status(422).json({ error: error.message });
+      if (error.code === 'ERR_TARGET_HTTP') return res.status(error.status >= 500 ? 502 : 422).json({ error: error.message });
       if (error.code === 'ERR_ANALYSIS_BUSY') return res.status(503).json({ error: 'The analyzer is busy. Try again shortly.' });
       if (error.code === 'ERR_ANALYSIS_TIMEOUT' || error.code === 'ECONNABORTED') {
         return res.status(504).json({ error: 'Analysis timed out. The site may be unavailable or too complex.' });

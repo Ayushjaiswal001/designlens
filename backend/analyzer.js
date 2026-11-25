@@ -89,6 +89,16 @@ async function fetchHtml(url) {
       redirectError.code = 'ERR_REDIRECT_BLOCKED';
       throw redirectError;
     }
+    if (error.response) {
+      const status = error.response.status;
+      const blocked = [401, 403, 407, 429].includes(status);
+      const targetError = new Error(blocked
+        ? `The website blocked automated access (HTTP ${status}).`
+        : `The website returned HTTP ${status}.`);
+      targetError.code = blocked ? 'ERR_TARGET_BLOCKED' : 'ERR_TARGET_HTTP';
+      targetError.status = status;
+      throw targetError;
+    }
     throw error;
   }
   if (!response.data || typeof response.data !== 'string') throw new Error('The server returned an empty response.');
@@ -281,7 +291,7 @@ function analyzeUrl(url) {
     const { parentPort, workerData } = require('node:worker_threads');
     require(workerData.modulePath).analyzeUrlUnsafe(workerData.url)
       .then(result => parentPort.postMessage({ result }))
-      .catch(error => parentPort.postMessage({ error: { message: error.message, code: error.code, stack: error.stack } }));
+      .catch(error => parentPort.postMessage({ error: { message: error.message, code: error.code, status: error.status, stack: error.stack } }));
   `;
   return new Promise((resolve, reject) => {
     const worker = new Worker(workerSource, { eval: true, workerData: { modulePath: __filename, url } });
@@ -301,6 +311,7 @@ function analyzeUrl(url) {
       if (message.error) {
         const error = new Error(message.error.message);
         error.code = message.error.code;
+        error.status = message.error.status;
         error.stack = message.error.stack;
         reject(error);
       } else resolve(message.result);

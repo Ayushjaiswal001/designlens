@@ -11,8 +11,9 @@ const { analyzeUrl, isPublicAddress } = require('./backend/analyzer');
 
 const PORT = Number(process.env.PORT) || 3000;
 
-function createApp({ analyze = analyzeUrl, logger = console } = {}) {
+function createApp({ analyze = analyzeUrl, logger = console, allowedOrigins = process.env.DESIGNLENS_ALLOWED_ORIGINS || '' } = {}) {
   const app = express();
+  const allowedOriginSet = new Set(String(allowedOrigins).split(',').map(origin => origin.trim()).filter(Boolean));
   app.disable('x-powered-by');
   app.use(helmet({
     contentSecurityPolicy: {
@@ -29,6 +30,22 @@ function createApp({ analyze = analyzeUrl, logger = console } = {}) {
       }
     }
   }));
+  app.use((req, res, next) => {
+    const origin = req.get('Origin');
+    const isAllowed = origin && allowedOriginSet.has(origin);
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.vary('Origin');
+    }
+    if (req.method === 'OPTIONS') {
+      if (!isAllowed) return res.status(403).json({ error: 'Origin not allowed.' });
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Max-Age', '600');
+      return res.sendStatus(204);
+    }
+    next();
+  });
   app.use(express.json({ limit: '10kb', strict: true }));
   app.use(express.static(path.join(__dirname, 'public'), { fallthrough: true, index: 'index.html' }));
 

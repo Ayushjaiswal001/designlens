@@ -202,7 +202,7 @@ axe-core reports violations, passes, and incomplete checks. An incomplete check 
 | Scan history/comparison | Compact browser-local summaries; comparison reports new, resolved, and persistent rule findings plus affected-element count changes |
 | Report export | Full scan JSON and spreadsheet-safe CSV downloads; CSV includes finding samples and scan summary metadata |
 | Learning hub | Static accessibility lessons |
-| API/analyzer | Validated public URL fetch, static DOM analysis, error mapping |
+| API/analyzer | Validated public URL fetch, static DOM analysis, error mapping, exact-origin CORS for a separately hosted Pages frontend |
 
 ## 10. Audit findings and repairs
 
@@ -221,13 +221,14 @@ The initial implementation used hostname prefix checks, followed redirects, and 
 - Fixed invalid contrast input feedback and hid stale scan output when a new scan begins.
 - Added WCAG 2.2 A/AA axe tags, JSON/CSV downloads, and issue-level comparison of saved scans.
 - Added focused static summaries for links, tables, page setup, alt-text wording, media tracks, and interactive control names, plus browser-local guided reviews for form errors, keyboard focus, zoom/reflow, and PDF accessibility.
+- Added a GitHub Pages workflow, relative asset paths for project sites, configurable API base URL, and allowlisted API CORS for the split Pages/Render deployment.
 - Rewrote setup and limitation documentation to reflect the real repository.
 
 ### Remaining concerns
 
 - Worker threads share the parent process and are not a full memory/OS sandbox.
 - CDN libraries are runtime dependencies of the UI; an outage can impair charting or styling.
-- No automated browser/UI journey tests, database, auth, deployment pipeline, or server-side history.
+- No automated browser/UI journey tests, database, auth, or server-side history. A Pages workflow exists but has not yet completed an external deployment.
 - DNS pinning and public address filtering reduce SSRF exposure; deployment should also enforce egress controls at the network layer.
 - Full report restoration and selector-level comparison remain incomplete; the current comparison matches findings by axe rule ID.
 
@@ -239,13 +240,13 @@ Run `npm ci`, then `npm test`. Tests use the built-in Node test runner and start
 
 | Check | Result | Evidence |
 |---|---|---|
-| `npm test` | **Passed: 11, failed: 0, skipped: 0** | Executed on Node v24.19.0; includes WCAG 2.2 tag configuration, additional page-data extraction checks, address-range tests, no-script/no-subresource test, and API integration tests |
+| `npm test` | **Passed: 12, failed: 0, skipped: 0** | Executed on Node v24.19.0; includes WCAG 2.2 tag configuration, additional page-data and CORS allowlist checks, address-range tests, no-script/no-subresource test, and API integration tests |
 | `npm audit` | **0 vulnerabilities** | Executed after pin override for transitive `minimatch` |
 | Live `GET /api/health` | **Passed, HTTP 200** | Running local Express service returned `{status:"ok"}` |
 | Live private URL request | **Passed rejection, HTTP 403** | `http://127.0.0.1` rejected before analyzer invocation |
 | Live public scan | **Passed, HTTP 200** | `https://example.com` fetched and analyzed; response contained results in approximately 2.7 seconds in the final smoke run |
 | Manual browser feature check | **Passed** | Downloaded and inspected JSON/CSV reports; compared saved scans and confirmed new, resolved, persistent, and affected-count results |
-| Frontend browser interaction/E2E | **Not run** | No browser automation dependency or test harness exists in the repository; the new guided check panels were not visually verified |
+| Frontend browser interaction/E2E | **Not run** | No browser automation dependency or test harness exists in the repository; the new hosting workflow and guided check panels were not visually verified |
 | External credential-dependent integrations | **Not applicable** | No AI provider, database, or credentialed service integration exists |
 
 Observed duration is a single smoke-test result, not a benchmark or performance guarantee. axe rules are not independently validated against a labeled ground-truth corpus.
@@ -328,9 +329,9 @@ We are careful about limitations: this version analyzes only the initial HTML. J
 22. **What is the score formula?** A project-specific weighted penalty based on affected-element severity counts, clamped to 0–100.
 23. **Is that score standardized?** No, it is explicitly a project indicator, not a WCAG score.
 24. **How are errors handled?** Known failure classes map to statuses and safe messages; unexpected errors are logged with request ID and hidden behind a generic response.
-25. **What tests were executed?** Eight built-in Node unit/API tests, dependency audit, and live health/private-target/public-scan checks.
+25. **What tests were executed?** Twelve built-in Node unit/API tests, dependency audit, and live health/private-target/public-scan checks.
 26. **Were frontend E2E tests run?** No; there is no browser automation harness in the repo.
-27. **What security headers are used?** Helmet with CSP and other defaults; the app uses same-origin API calls and no permissive CORS middleware.
+27. **What security headers are used?** Helmet with CSP and other defaults. Cross-origin API calls are allowed only from configured frontend origins.
 28. **Why pin dependencies with a lockfile?** To make installs repeatable and preserve the audited dependency tree.
 29. **What is the biggest remaining technical limitation?** Static HTML analysis without a real browser rendering engine.
 30. **What would you build next?** A carefully sandboxed browser-based scan mode, then full report restore and finding-level diffs.

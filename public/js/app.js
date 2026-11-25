@@ -10,6 +10,7 @@ let allIssues   = [];          // flat issue array for explorer
 let scanHistory = loadHistory(); // array of history entries
 let manualReviewState = loadManualReviewState();
 let selectedPdfObjectUrl = null;
+const DESIGNLENS_API_BASE = String(window.DESIGNLENS_API_BASE || '').trim().replace(/\/+$/, '');
 
 /* ── Fix Guidance (before/after code) ────────────────────────── */
 const FIX_GUIDANCE = {
@@ -279,6 +280,13 @@ function calcScore(data) {
   return Math.max(0, Math.min(100, Math.round(100 - penalty)));
 }
 
+function getAnalyzeApiUrl() {
+  if (!DESIGNLENS_API_BASE && location.hostname.endsWith('.github.io')) {
+    throw new Error('The scan service is not connected yet. Add the Render API URL to the DESIGNLENS_API_BASE GitHub variable, then redeploy Pages.');
+  }
+  return `${DESIGNLENS_API_BASE}/api/analyze`;
+}
+
 /* ══════════════════════════════════════════════════════════════
    HISTORY (localStorage)
 ══════════════════════════════════════════════════════════════ */
@@ -469,7 +477,7 @@ async function doScan(url, btnId, errId, loadingId, stepIds) {
   document.getElementById('scanResults').classList.add('d-none');
 
   try {
-    const res = await fetch('/api/analyze', {
+    const res = await fetch(getAnalyzeApiUrl(), {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({url})
     });

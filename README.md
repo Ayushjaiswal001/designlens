@@ -41,6 +41,17 @@ npm start
 
 Open <http://localhost:3000>. For development with auto-restart, run `npm run dev`.
 
+## Hosting
+
+The repository includes a GitHub Actions workflow that publishes the static frontend from `public/` to GitHub Pages. The Express scanner must run as a Node web service, such as on Render. For the split setup:
+
+1. Deploy this repository's `main` branch as a Render Web Service with build command `npm ci` and start command `npm start`.
+2. Set Render environment variable `DESIGNLENS_ALLOWED_ORIGINS` to `https://ayushjaiswal001.github.io`.
+3. Set GitHub Actions repository variable `DESIGNLENS_API_BASE` to the deployed Render service URL, without a trailing slash.
+4. In repository Settings → Pages, choose GitHub Actions as the source.
+
+The Pages project URL is `https://ayushjaiswal001.github.io/designlens/`. If the API URL variable is empty, the hosted interface displays a setup message when a scan is submitted.
+
 ## API
 
 ### `GET /api/health`

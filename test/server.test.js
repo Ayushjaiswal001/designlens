@@ -21,6 +21,29 @@ test('health route reports the service as ready', async () => {
   });
 });
 
+test('allows CORS preflight only for configured frontend origins', async () => {
+  const allowedOrigin = 'https://ayushjaiswal001.github.io';
+  await withServer(createApp({ allowedOrigins: allowedOrigin }), async base => {
+    const allowed = await fetch(`${base}/api/analyze`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: allowedOrigin,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type'
+      }
+    });
+    assert.equal(allowed.status, 204);
+    assert.equal(allowed.headers.get('access-control-allow-origin'), allowedOrigin);
+    assert.match(allowed.headers.get('access-control-allow-methods'), /POST/);
+
+    const denied = await fetch(`${base}/api/analyze`, {
+      method: 'OPTIONS', headers: { origin: 'https://untrusted.example', 'access-control-request-method': 'POST' }
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.headers.get('access-control-allow-origin'), null);
+  });
+});
+
 test('rejects malformed, non-http, credentialed, and private scan targets', async () => {
   let calls = 0;
   await withServer(createApp({ analyze: async () => { calls += 1; return {}; }, logger: { error() {} } }), async base => {

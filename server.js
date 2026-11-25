@@ -14,6 +14,9 @@ const PORT = Number(process.env.PORT) || 3000;
 function createApp({ analyze = analyzeUrl, logger = console, allowedOrigins = process.env.DESIGNLENS_ALLOWED_ORIGINS || '' } = {}) {
   const app = express();
   const allowedOriginSet = new Set(String(allowedOrigins).split(',').map(origin => origin.trim()).filter(Boolean));
+  // Render adds one reverse proxy in front of Express. Trust it so per-visitor
+  // rate limits use the real client IP instead of one shared proxy address.
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(helmet({
     contentSecurityPolicy: {

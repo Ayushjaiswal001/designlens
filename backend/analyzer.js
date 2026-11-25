@@ -9,7 +9,9 @@ const axe = require('axe-core');
 const ipaddr = require('ipaddr.js');
 
 const FETCH_TIMEOUT_MS = 12_000;
-const ANALYSIS_TIMEOUT_MS = 20_000;
+// The free Render instance has limited CPU; large but valid pages need more
+// time for axe-core to finish on that plan.
+const ANALYSIS_TIMEOUT_MS = 60_000;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_CONCURRENT_SCANS = 2;
 let activeScans = 0;

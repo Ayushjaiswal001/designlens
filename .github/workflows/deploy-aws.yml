@@ -76,10 +76,9 @@ jobs:
         env:
           SERVICE_ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
         run: |
-          endpoint_host="$(printf '%s' "$SERVICE_ENDPOINT" | sed -E 's#^https?://##; s#/.*$##')"
-          load_balancer_arn="$(aws elbv2 describe-load-balancers --region "$AWS_REGION" --output json | jq -r --arg dns "$endpoint_host" '.LoadBalancers[] | select(.DNSName == $dns) | .LoadBalancerArn' | head -n 1)"
+          load_balancer_arn="$(aws elbv2 describe-load-balancers --region "$AWS_REGION" --output json | jq -r '[.LoadBalancers[] | select(.LoadBalancerName | startswith("ecs-express-gateway-alb-")) | .LoadBalancerArn] | if length == 1 then .[0] else empty end')"
           if [[ -z "$load_balancer_arn" || "$load_balancer_arn" == "null" ]]; then
-            echo "Could not find the load balancer for the ECS service endpoint." >&2
+            echo "Could not uniquely identify the ECS Express load balancer." >&2
             exit 1
           fi
           aws elbv2 modify-load-balancer-attributes \

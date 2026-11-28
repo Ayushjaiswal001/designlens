@@ -2,14 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: DesignLens ECR repository and least-privilege ECS/GitHub deployment roles.
 
 Parameters:
-  GitHubRepository:
+  GitHubOIDCSubject:
     Type: String
-    Default: Ayushjaiswal001/designlens
-    Description: GitHub owner/repository trusted to deploy.
-  GitHubEnvironment:
-    Type: String
-    Default: production
-    Description: GitHub environment required for OIDC role assumption.
+    Default: repo:Ayushjaiswal001@173612692/designlens@1471999511:environment:production
+    Description: Exact immutable subject claim trusted to deploy from this GitHub environment.
   ECRRepositoryName:
     Type: String
     Default: designlens-api
@@ -114,7 +110,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepository}:environment:${GitHubEnvironment}'
+                token.actions.githubusercontent.com:sub: !Ref GitHubOIDCSubject
                 token.actions.githubusercontent.com:ref: refs/heads/main
       Policies:
         - PolicyName: DesignLensDeploy

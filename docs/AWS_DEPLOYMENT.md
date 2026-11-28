@@ -24,9 +24,9 @@ aws cloudformation deploy \
   --region ap-south-1
 ```
 
-The deployment role is trusted only for this repository's `production` environment on `main`. ECR push rights are scoped to `designlens-api`; `iam:PassRole` is restricted to the two ECS roles; and load balancer timeout changes are restricted to Application Load Balancers tagged `Project=DesignLens`. The policy includes the ECS Express service-management permissions from the [AWS action's IAM guidance](https://github.com/aws-actions/amazon-ecs-deploy-express-service#iam-permissions). No long-lived AWS access keys are created.
+The deployment role uses this repository's immutable GitHub OIDC subject for the `production` environment and also requires the `refs/heads/main` ref. ECR push rights are scoped to `designlens-api`; `iam:PassRole` is restricted to the two ECS roles; and load balancer timeout changes are restricted to Application Load Balancers tagged `Project=DesignLens`. The policy includes the ECS Express service-management permissions from the [AWS action's IAM guidance](https://github.com/aws-actions/amazon-ecs-deploy-express-service#iam-permissions). No long-lived AWS access keys are created.
 
-The AWS identity used to create these prerequisites must have permission to pass the infrastructure and task execution roles. Keep the GitHub OIDC trust limited to `repo:Ayushjaiswal001/designlens:environment:production`; do not create long-lived AWS access keys for Actions.
+The AWS identity used to create these prerequisites must have permission to pass the infrastructure and task execution roles. Keep the GitHub OIDC trust limited to the exact subject value in the template and do not create long-lived AWS access keys for Actions.
 
 ## GitHub configuration
 

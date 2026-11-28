@@ -54,6 +54,7 @@ Resources:
                 "description": "Keep the ten newest tagged images",
                 "selection": {
                   "tagStatus": "tagged",
+                  "tagPrefixList": ["sha-"],
                   "countType": "imageCountMoreThan",
                   "countNumber": 10
                 },

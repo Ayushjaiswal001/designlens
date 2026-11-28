@@ -92,5 +92,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh variable set DESIGNLENS_API_BASE --body "$API_ENDPOINT" --repo "$GITHUB_REPOSITORY"
-          gh workflow run deploy-pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+          gh workflow run deploy-pages.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field api-base="$API_ENDPOINT"

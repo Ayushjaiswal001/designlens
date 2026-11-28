@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      api-base:
+        description: API base URL for this deployment
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,7 +32,7 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Prepare static site
         env:
-          DESIGNLENS_API_BASE: ${{ vars.DESIGNLENS_API_BASE }}
+          DESIGNLENS_API_BASE: ${{ inputs['api-base'] || vars.DESIGNLENS_API_BASE }}
         run: |
           mkdir -p _site
           cp -R public/. _site/

@@ -124,6 +124,7 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
+                  - ecr:BatchGetImage
                   - ecr:BatchCheckLayerAvailability
                   - ecr:CompleteLayerUpload
                   - ecr:DescribeRepositories

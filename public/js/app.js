@@ -282,7 +282,7 @@ function calcScore(data) {
 
 function getAnalyzeApiUrl() {
   if (!DESIGNLENS_API_BASE && location.hostname.endsWith('.github.io')) {
-    throw new Error('The scan service is not connected yet. Add the Render API URL to the DESIGNLENS_API_BASE GitHub variable, then redeploy Pages.');
+    throw new Error('The scan service is not connected yet. Add the API URL to the DESIGNLENS_API_BASE GitHub variable, then redeploy Pages.');
   }
   return `${DESIGNLENS_API_BASE}/api/analyze`;
 }

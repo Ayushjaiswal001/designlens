@@ -1,0 +1,97 @@
+name: Deploy DesignLens API to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: write
+
+concurrency:
+  group: designlens-aws-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Set this repository variable to "true" after AWS prerequisites are ready.
+    if: ${{ github.ref == 'refs/heads/main' && vars.AWS_DEPLOYMENT_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: DesignLensDeployment
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: image
+        shell: bash
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
+
+      - name: Deploy to ECS Express Mode
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-express-service@v1
+        with:
+          service-name: ${{ vars.ECS_SERVICE }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
+          execution-role-arn: ${{ vars.ECS_EXECUTION_ROLE_ARN }}
+          infrastructure-role-arn: ${{ vars.ECS_INFRASTRUCTURE_ROLE_ARN }}
+          container-port: '3000'
+          environment-variables: >-
+            [{"name":"PORT","value":"3000"},{"name":"NODE_ENV","value":"production"},{"name":"DESIGNLENS_ALLOWED_ORIGINS","value":"${{ vars.DESIGNLENS_ALLOWED_ORIGINS }}"}]
+          cpu: '2048'
+          memory: '8192'
+          health-check-path: /api/health
+          min-task-count: '1'
+          max-task-count: '3'
+          auto-scaling-metric: AVERAGE_CPU
+          auto-scaling-target-value: '60'
+          tags: |
+            Project=DesignLens
+            Service=designlens-api
+
+      - name: Extend load balancer timeout for long scans
+        shell: bash
+        env:
+          SERVICE_ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+        run: |
+          endpoint_host="$(printf '%s' "$SERVICE_ENDPOINT" | sed -E 's#^https?://##; s#/.*$##')"
+          load_balancer_arn="$(aws elbv2 describe-load-balancers --region "$AWS_REGION" --output json | jq -r --arg dns "$endpoint_host" '.LoadBalancers[] | select(.DNSName == $dns) | .LoadBalancerArn' | head -n 1)"
+          if [[ -z "$load_balancer_arn" || "$load_balancer_arn" == "null" ]]; then
+            echo "Could not find the load balancer for the ECS service endpoint." >&2
+            exit 1
+          fi
+          aws elbv2 modify-load-balancer-attributes \
+            --region "$AWS_REGION" \
+            --load-balancer-arn "$load_balancer_arn" \
+            --attributes Key=idle_timeout.timeout_seconds,Value=180
+
+      - name: Publish API URL to GitHub Pages
+        env:
+          API_ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh variable set DESIGNLENS_API_BASE --body "$API_ENDPOINT" --repo "$GITHUB_REPOSITORY"
+          gh workflow run deploy-pages.yml --repo "$GITHUB_REPOSITORY" --ref main

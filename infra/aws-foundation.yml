@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DesignLens ECR repository and least-privilege ECS/GitHub deployment roles.
+
+Parameters:
+  GitHubRepository:
+    Type: String
+    Default: Ayushjaiswal001/designlens
+    Description: GitHub owner/repository trusted to deploy.
+  GitHubEnvironment:
+    Type: String
+    Default: production
+    Description: GitHub environment required for OIDC role assumption.
+  ECRRepositoryName:
+    Type: String
+    Default: designlens-api
+
+Resources:
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Project
+          Value: DesignLens
+
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepositoryName
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images after seven days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": { "type": "expire" }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep the ten newest tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: DesignLens
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DesignLensECSTaskExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Project
+          Value: DesignLens
+
+  ExpressInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DesignLensECSExpressInfrastructureRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+      Tags:
+        - Key: Project
+          Value: DesignLens
+
+  GitHubDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DesignLensGitHubActionsDeploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !GetAtt GitHubOIDCProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepository}:environment:${GitHubEnvironment}'
+                token.actions.githubusercontent.com:ref: refs/heads/main
+      Policies:
+        - PolicyName: DesignLensDeploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PushContainerImage
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeRepositories
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt ApiRepository.Arn
+              - Sid: ManageECSExpressService
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:RegisterTaskDefinition
+                  - ecs:CreateExpressGatewayService
+                  - ecs:UpdateExpressGatewayService
+                  - ecs:DescribeExpressGatewayService
+                  - ecs:DescribeClusters
+                  - ecs:DescribeServices
+                  - ecs:ListServiceDeployments
+                  - ecs:DescribeServiceDeployments
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                Resource: '*'
+              - Sid: PassOnlyDesignLensRolesToECS
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt TaskExecutionRole.Arn
+                  - !GetAtt ExpressInfrastructureRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs.amazonaws.com
+              - Sid: FindExpressLoadBalancer
+                Effect: Allow
+                Action: elasticloadbalancing:DescribeLoadBalancers
+                Resource: '*'
+              - Sid: ExtendOnlyDesignLensLoadBalancerTimeout
+                Effect: Allow
+                Action: elasticloadbalancing:ModifyLoadBalancerAttributes
+                Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/app/*/*'
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Project: DesignLens
+      Tags:
+        - Key: Project
+          Value: DesignLens
+
+Outputs:
+  ApiRepositoryName:
+    Description: ECR repository name for the API container.
+    Value: !Ref ApiRepository
+  ApiRepositoryUri:
+    Description: ECR image URI prefix.
+    Value: !GetAtt ApiRepository.RepositoryUri
+  TaskExecutionRoleArn:
+    Description: ECS task execution role ARN.
+    Value: !GetAtt TaskExecutionRole.Arn
+  ExpressInfrastructureRoleArn:
+    Description: ECS Express infrastructure role ARN.
+    Value: !GetAtt ExpressInfrastructureRole.Arn
+  GitHubDeploymentRoleArn:
+    Description: GitHub OIDC deployment role ARN.
+    Value: !GetAtt GitHubDeploymentRole.Arn

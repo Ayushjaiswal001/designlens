@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+npm-debug.log*
+Dockerfile*
+docs
+test
+*.md
+AUDIT_REPORT.md
+PROJECT_ANALYSIS.md
